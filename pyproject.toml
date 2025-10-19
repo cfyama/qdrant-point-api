@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "qdrant-point-api"
+version = "0.1.0"
+description = ""
+authors = ["CF"]
+packages = [{ include = "src" }]
+
+[tool.poetry.dependencies]
+python = "3.11.3"
+python-dotenv = "1.0.0"
+qdrant-client = "^1.15.1"
+fastapi = {extras = ["standard"], version = "^0.116.1"}
+uvicorn = "^0.35.0"
+httpx = "^0.28.1"
+requests = "^2.32.5"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
