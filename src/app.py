@@ -136,13 +136,26 @@ def transform_cubec_note_response(points: List[Dict[str, Any]]) -> List[Dict[str
         new_payload = {
             "title": metadata.get("main_category", ""),
             "disease": metadata.get("disease_name", ""),
-            "content": payload.get("page_content", ""),
+            "context": payload.get("page_content", ""),
         }
 
         # その他のmetadataフィールドもコピー
         for key, value in metadata.items():
-            if key not in ["main_category", "disease_name"]:
+            if key not in ["main_category", "disease_name", "date"]:
                 new_payload[key] = value
+
+        # dateフィールドを変換して追加
+        if "date" in metadata and metadata["date"]:
+            date_str = metadata["date"]
+            # "251012" -> "2025-10-12" に変換
+            if len(date_str) == 6:
+                year = "20" + date_str[:2]
+                month = date_str[2:4]
+                day = date_str[4:6]
+                new_payload["publicationDate"] = f"{year}-{month}-{day}"
+            else:
+                # 6桁でない場合はそのまま
+                new_payload["publicationDate"] = date_str
 
         transformed_point = {
             "id": point.get("id"),

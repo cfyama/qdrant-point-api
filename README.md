@@ -156,7 +156,7 @@ curl -X POST http://localhost:7860/api \
       "payload": {
         "title": "WPW症候群 -- 概要・推奨",
         "disease": "WPW症候群",
-        "content": "# WPW症候群（循環器）\n## WPW症候群 -- 概要・推奨\n\n### 概要\n\n  * WPW症候群は、心房と心室の間に副伝導路（ケント束）とよばれる、正常な刺激伝導路以外の興奮の通り道が存在する疾患です。\n...",
+        "context": "# WPW症候群（循環器）\n## WPW症候群 -- 概要・推奨\n\n### 概要\n\n  * WPW症候群は、心房と心室の間に副伝導路（ケント束）とよばれる、正常な刺激伝導路以外の興奮の通り道が存在する疾患です。\n...",
         "section_title": "概要",
         "main_department": "循環器",
         "supervisor": "せい@循環器内科x製薬",
@@ -216,7 +216,7 @@ curl -X POST http://localhost:7860/api/cubec-note/chapter \
       "payload": {
         "title": "WPW症候群 -- 概要・推奨",
         "disease": "WPW症候群",
-        "content": "# WPW症候群（循環器）\n## WPW症候群 -- 概要・推奨\n\n### 概要\n...",
+        "context": "# WPW症候群（循環器）\n## WPW症候群 -- 概要・推奨\n\n### 概要\n...",
         "section_title": "概要",
         "main_department": "循環器",
         ...
@@ -227,7 +227,7 @@ curl -X POST http://localhost:7860/api/cubec-note/chapter \
       "payload": {
         "title": "WPW症候群 -- 概要・推奨",
         "disease": "WPW症候群",
-        "content": "# WPW症候群（循環器）\n## WPW症候群 -- 概要・推奨\n\n### 推奨\n...",
+        "context": "# WPW症候群（循環器）\n## WPW症候群 -- 概要・推奨\n\n### 推奨\n...",
         "section_title": "推奨",
         ...
       }
@@ -341,7 +341,7 @@ APIレスポンスでは、内部のネスト構造をフラット化して返�
   "payload": {
     "title": "WPW症候群 -- 概要・推奨",
     "disease": "WPW症候群",
-    "content": "# WPW症候群（循環器）\n## WPW症候群 -- 概要・推奨\n\n### 概要\n...",
+    "context": "# WPW症候群（循環器）\n## WPW症候群 -- 概要・推奨\n\n### 概要\n...",
     "section_title": "概要",
     "main_department": "循環器",
     "sub_department": "",
@@ -356,7 +356,7 @@ APIレスポンスでは、内部のネスト構造をフラット化して返�
     "gl_count": 1,
     "file_name": "WPW症候群_draft_251012.md",
     "source": "医学ノート",
-    "date": "251012",
+    "publicationDate": "2025-10-12",
     "section_level": 4,
     "line_number": 2,
     "content_length": 379,
@@ -369,7 +369,7 @@ APIレスポンスでは、内部のネスト構造をフラット化して返�
 **主要フィールド:**
 - `title`: 章のタイトル（メインカテゴリ）
 - `disease`: 疾患名
-- `content`: マークダウン形式の本文内容
+- `context`: マークダウン形式の本文内容
 
 ### PACKAGE_INSERTコレクション
 
@@ -437,7 +437,7 @@ CUBEC_NOTEコレクションでは、Qdrantの新しいデータ構造（`page_c
 
 - `metadata.main_category` → `title`
 - `metadata.disease_name` → `disease`
-- `page_content` → `content`
+- `page_content` → `context`
 
 これにより、データベース構造が変更されても、APIクライアントは変更なしで使用できます。
 
