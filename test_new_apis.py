@@ -52,8 +52,8 @@ def test_cubec_note_chapter():
 
     # テストケース1: 正常なリクエスト
     test_data = {
-        "title": "診断方針(疾患の除外)",  # 実際のデータに合わせて変更してください
-        "disease": "感染性心内膜炎",      # 実際のデータに合わせて変更してください
+        "title": "WPW症候群 -- 概要・推奨",  # 実際のデータに合わせて変更してください
+        "disease": "WPW症候群",      # 実際のデータに合わせて変更してください
         "with_payload": True,
         "with_vectors": False
     }
@@ -67,7 +67,7 @@ def test_cubec_note_chapter():
         print_test_result(
             "CUBEC_NOTE章取得（正常ケース）",
             response,
-            expected_fields=["title", "disease"]
+            expected_fields=["page_content", "metadata"]
         )
     except requests.exceptions.Timeout:
         print("❌ タイムアウトエラー")
@@ -102,7 +102,7 @@ def test_cubec_note_page():
 
     # テストケース1: 正常なリクエスト
     test_data = {
-        "disease": "感染性心内膜炎",  # 実際のデータに合わせて変更してください
+        "disease": "WPW症候群",  # 実際のデータに合わせて変更してください
         "with_payload": True,
         "with_vectors": False
     }
@@ -116,7 +116,7 @@ def test_cubec_note_page():
         print_test_result(
             "CUBEC_NOTEページ取得（正常ケース）",
             response,
-            expected_fields=["disease"]
+            expected_fields=["page_content", "metadata"]
         )
     except requests.exceptions.Timeout:
         print("❌ タイムアウトエラー")

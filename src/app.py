@@ -125,6 +125,38 @@ async def fetch_drug_url(package_insert_no: str) -> Optional[str]:
         logger.error(f"Error fetching drug URL for {package_insert_no}: {e}")
         return None
 
+def transform_cubec_note_response(points: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """CUBEC_NOTEのレスポンスを元の形式に変換する"""
+    transformed = []
+    for point in points:
+        payload = point.get("payload", {})
+        metadata = payload.get("metadata", {})
+
+        # metadataをフラット化し、フィールド名を元の名前にマッピング
+        new_payload = {
+            "title": metadata.get("main_category", ""),
+            "disease": metadata.get("disease_name", ""),
+            "content": payload.get("page_content", ""),
+        }
+
+        # その他のmetadataフィールドもコピー
+        for key, value in metadata.items():
+            if key not in ["main_category", "disease_name"]:
+                new_payload[key] = value
+
+        transformed_point = {
+            "id": point.get("id"),
+            "payload": new_payload
+        }
+
+        # vectorがあれば追加
+        if "vector" in point:
+            transformed_point["vector"] = point["vector"]
+
+        transformed.append(transformed_point)
+
+    return transformed
+
 def search_points_by_filters(collection_name: str, filters: List[Dict[str, Any]], with_payload: bool = True, with_vectors: bool = False):
     """フィルター条件に基づいてポイントを検索する"""
     try:
@@ -213,8 +245,8 @@ class PackageInsertChapterRequest(BaseModel):
 async def get_cubec_note_chapter(request: CubecNoteChapterRequest):
     """CUBEC_NOTEの章取得API - titleとdiseaseで検索"""
     filters = [
-        {"field": "title", "value": request.title, "type": "text"},
-        {"field": "disease", "value": request.disease, "type": "text"}
+        {"field": "metadata.main_category", "value": request.title, "type": "text"},
+        {"field": "metadata.disease_name", "value": request.disease, "type": "text"}
     ]
 
     points = search_points_by_filters(
@@ -224,13 +256,16 @@ async def get_cubec_note_chapter(request: CubecNoteChapterRequest):
         with_vectors=request.with_vectors
     )
 
-    return {"success": True, "data": points, "count": len(points)}
+    # レスポンスを元の形式に変換
+    transformed_points = transform_cubec_note_response(points)
+
+    return {"success": True, "data": transformed_points, "count": len(transformed_points)}
 
 @app.post("/api/cubec-note/page")
 async def get_cubec_note_page(request: CubecNotePageRequest):
     """CUBEC_NOTEのページ取得API - diseaseで検索"""
     filters = [
-        {"field": "disease", "value": request.disease, "type": "text"}
+        {"field": "metadata.disease_name", "value": request.disease, "type": "text"}
     ]
 
     points = search_points_by_filters(
@@ -240,7 +275,10 @@ async def get_cubec_note_page(request: CubecNotePageRequest):
         with_vectors=request.with_vectors
     )
 
-    return {"success": True, "data": points, "count": len(points)}
+    # レスポンスを元の形式に変換
+    transformed_points = transform_cubec_note_response(points)
+
+    return {"success": True, "data": transformed_points, "count": len(transformed_points)}
 
 @app.post("/api/package-insert/chapter")
 async def get_package_insert_chapter(request: PackageInsertChapterRequest):
