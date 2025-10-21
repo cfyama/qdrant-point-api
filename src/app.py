@@ -71,11 +71,13 @@ def get_points_from_ids(point_ids, collection_name, with_payload=True, with_vect
 class CollectionName(str, Enum):
     CUBEC_NOTE = "CUBEC_NOTE"
     PACKAGE_INSERT = "PACKAGE_INSERT"
+    GL = "GL"
     
     def get_actual_name(self):
         mapping = {
             "CUBEC_NOTE": os.getenv("COLLECTION_CUBEC_NOTE", "default_cubec_note"),
-            "PACKAGE_INSERT": os.getenv("COLLECTION_PACKAGE_INSERT", "default_package_insert")
+            "PACKAGE_INSERT": os.getenv("COLLECTION_PACKAGE_INSERT", "default_package_insert"),
+            "GL": os.getenv("COLLECTION_GL", "default_gl")
         }
         return mapping.get(self.value)
 
@@ -95,7 +97,8 @@ async def get_available_collections():
     return {
         "collections": [
             {"key": "CUBEC_NOTE", "name": CollectionName.CUBEC_NOTE.get_actual_name()},
-            {"key": "PACKAGE_INSERT", "name": CollectionName.PACKAGE_INSERT.get_actual_name()}
+            {"key": "PACKAGE_INSERT", "name": CollectionName.PACKAGE_INSERT.get_actual_name()},
+            {"key": "GL", "name": CollectionName.GL.get_actual_name()}
         ]
     }
 
@@ -134,28 +137,61 @@ def transform_cubec_note_response(points: List[Dict[str, Any]]) -> List[Dict[str
 
         # metadataをフラット化し、フィールド名を元の名前にマッピング
         new_payload = {
-            "title": metadata.get("main_category", ""),
-            "disease": metadata.get("disease_name", ""),
             "context": payload.get("page_content", ""),
         }
 
-        # その他のmetadataフィールドもコピー
+        # GL関連のフィールドを一時保存
+        gl_names = None
+        gl_links = None
+        gl_publishers = None
+        gl_departments = None
+        gl_free_or_paid = None
+
+        # その他のmetadataフィールドをコピー
         for key, value in metadata.items():
-            if key not in ["main_category", "disease_name", "date"]:
+            if key == "main_category":
+                new_payload["title"] = value
+            elif key == "disease_name":
+                new_payload["disease"] = value
+            elif key == "date":
+                # dateフィールドをpublicationDateにそのままコピー
+                new_payload["publicationDate"] = value
+            elif key == "source":
+                # "医学ノート" を "Cubec医学ノート" に変更
+                if value == "医学ノート":
+                    new_payload["source"] = "Cubec医学ノート"
+                else:
+                    new_payload["source"] = value
+            elif key == "gl_names":
+                gl_names = value
+            elif key == "gl_links":
+                gl_links = value
+            elif key == "gl_publishers":
+                gl_publishers = value
+            elif key == "gl_departments":
+                gl_departments = value
+            elif key == "gl_free_or_paid":
+                gl_free_or_paid = value
+            elif key == "gl_count":
+                # gl_countは配列から計算できるため除外
+                pass
+            else:
+                # その他のフィールドはそのままコピー
                 new_payload[key] = value
 
-        # dateフィールドを変換して追加
-        if "date" in metadata and metadata["date"]:
-            date_str = metadata["date"]
-            # "251012" -> "2025-10-12" に変換
-            if len(date_str) == 6:
-                year = "20" + date_str[:2]
-                month = date_str[2:4]
-                day = date_str[4:6]
-                new_payload["publicationDate"] = f"{year}-{month}-{day}"
-            else:
-                # 6桁でない場合はそのまま
-                new_payload["publicationDate"] = date_str
+        # GL情報を配列のオブジェクトにまとめる
+        if gl_names and isinstance(gl_names, list):
+            gl_array = []
+            for i in range(len(gl_names)):
+                gl_item = {
+                    "name": gl_names[i] if i < len(gl_names) else None,
+                    "link": gl_links[i] if gl_links and i < len(gl_links) else None,
+                    "publisher": gl_publishers[i] if gl_publishers and i < len(gl_publishers) else None,
+                    "department": gl_departments[i] if gl_departments and i < len(gl_departments) else None,
+                    "access": gl_free_or_paid[i] if gl_free_or_paid and i < len(gl_free_or_paid) else None,
+                }
+                gl_array.append(gl_item)
+            new_payload["gl"] = gl_array
 
         transformed_point = {
             "id": point.get("id"),
@@ -350,6 +386,10 @@ async def get_points(request: PointRequest):
         with_payload=request.with_payload,
         with_vectors=request.with_vectors
     )
+
+    # CUBEC_NOTEコレクションの場合、レスポンスを変換
+    if request.collection_name == CollectionName.CUBEC_NOTE:
+        points = transform_cubec_note_response(points)
 
     # PACKAGE_INSERTコレクションの場合、URLを取得して追加
     if request.collection_name == CollectionName.PACKAGE_INSERT:
