@@ -71,13 +71,13 @@ def get_points_from_ids(point_ids, collection_name, with_payload=True, with_vect
 class CollectionName(str, Enum):
     CUBEC_NOTE = "CUBEC_NOTE"
     PACKAGE_INSERT = "PACKAGE_INSERT"
-    GL = "GL"
+    GUIDELINE = "GUIDELINE"
     
     def get_actual_name(self):
         mapping = {
             "CUBEC_NOTE": os.getenv("COLLECTION_CUBEC_NOTE", "default_cubec_note"),
             "PACKAGE_INSERT": os.getenv("COLLECTION_PACKAGE_INSERT", "default_package_insert"),
-            "GL": os.getenv("COLLECTION_GL", "default_gl")
+            "GUIDELINE": os.getenv("COLLECTION_GUIDELINE", "default_gl")
         }
         return mapping.get(self.value)
 
@@ -98,7 +98,7 @@ async def get_available_collections():
         "collections": [
             {"key": "CUBEC_NOTE", "name": CollectionName.CUBEC_NOTE.get_actual_name()},
             {"key": "PACKAGE_INSERT", "name": CollectionName.PACKAGE_INSERT.get_actual_name()},
-            {"key": "GL", "name": CollectionName.GL.get_actual_name()}
+            {"key": "GUIDELINE", "name": CollectionName.GUIDELINE.get_actual_name()}
         ]
     }
 
@@ -192,6 +192,51 @@ def transform_cubec_note_response(points: List[Dict[str, Any]]) -> List[Dict[str
                 }
                 gl_array.append(gl_item)
             new_payload["gl"] = gl_array
+
+        transformed_point = {
+            "id": point.get("id"),
+            "payload": new_payload
+        }
+
+        # vectorがあれば追加
+        if "vector" in point:
+            transformed_point["vector"] = point["vector"]
+
+        transformed.append(transformed_point)
+
+    return transformed
+
+def transform_gl_response(points: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """GLのレスポンスを整形する"""
+    transformed = []
+    for point in points:
+        payload = point.get("payload", {})
+        metadata = payload.get("metadata", {})
+
+        # metadataをフラット化
+        new_payload = {
+            "context": payload.get("page_content", ""),
+        }
+
+        # メタデータフィールドをコピー
+        for key, value in metadata.items():
+            if key == "gl_name":
+                new_payload["guideline_name"] = value
+            elif key == "heading_1":
+                new_payload["heading1"] = value
+            elif key == "heading_2":
+                new_payload["heading2"] = value
+            elif key == "heading_3":
+                new_payload["heading3"] = value
+            elif key == "source":
+                # "GL" を "GUIDELINE" に変更
+                if value == "GL":
+                    new_payload["source"] = "GUIDELINE"
+                else:
+                    new_payload["source"] = value
+            else:
+                # その他のフィールドはそのままコピー
+                new_payload[key] = value
 
         transformed_point = {
             "id": point.get("id"),
@@ -390,6 +435,10 @@ async def get_points(request: PointRequest):
     # CUBEC_NOTEコレクションの場合、レスポンスを変換
     if request.collection_name == CollectionName.CUBEC_NOTE:
         points = transform_cubec_note_response(points)
+
+    # GLコレクションの場合、レスポンスを変換
+    if request.collection_name == CollectionName.GUIDELINE:
+        points = transform_gl_response(points)
 
     # PACKAGE_INSERTコレクションの場合、URLを取得して追加
     if request.collection_name == CollectionName.PACKAGE_INSERT:
