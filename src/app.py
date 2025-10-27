@@ -103,7 +103,7 @@ async def get_available_collections():
     }
 
 async def fetch_drug_url(package_insert_no: str) -> Optional[str]:
-    """package_insert_noからURLを取得する"""
+    """package_insert_noからURLを取得する（旧バージョン・互換性のため残す）"""
     try:
         # 末尾の_XX部分を除去してdrug_codeを作成
         parts = package_insert_no.rsplit('_', 1)
@@ -126,6 +126,52 @@ async def fetch_drug_url(package_insert_no: str) -> Optional[str]:
                 return None
     except Exception as e:
         logger.error(f"Error fetching drug URL for {package_insert_no}: {e}")
+        return None
+
+async def fetch_drug_url_by_yj_code(yj_code: str) -> Optional[str]:
+    """YJコード（医薬品コード）からURLを取得する
+
+    Args:
+        yj_code: YJコード（カンマ区切りの場合は最初のコードを使用）
+
+    Returns:
+        添付文書のHTML URL、取得できない場合はNone
+    """
+    try:
+        # カンマ区切りの場合は最初のコードを使用
+        first_yj_code = yj_code.split(',')[0].strip() if ',' in yj_code else yj_code.strip()
+
+        if not first_yj_code:
+            logger.warning(f"Invalid yj_code: {yj_code}")
+            return None
+
+        # 環境変数からAPIベースURLを取得
+        api_base_url = os.getenv("DRUG_API_BASE_URL", "https://oma7a27ol6.execute-api.ap-northeast-1.amazonaws.com/Prod/")
+        url = f"{api_base_url}api/v1/documents/by-code/{first_yj_code}"
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, timeout=10.0)
+            if response.status_code == 200:
+                data = response.json()
+                # HTML形式のURLを優先的に取得
+                document_links = data.get("document_links", {})
+                html_links = document_links.get("html", [])
+
+                if html_links and len(html_links) > 0:
+                    return html_links[0].get("url")
+
+                # HTMLがない場合はPDFのURLを取得
+                pdf_links = document_links.get("pdf", [])
+                if pdf_links and len(pdf_links) > 0:
+                    return pdf_links[0].get("url")
+
+                logger.warning(f"No document links found for yj_code {first_yj_code}")
+                return None
+            else:
+                logger.warning(f"Failed to fetch URL for yj_code {first_yj_code}: status {response.status_code}")
+                return None
+    except Exception as e:
+        logger.error(f"Error fetching drug URL for yj_code {yj_code}: {e}")
         return None
 
 def transform_cubec_note_response(points: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -238,6 +284,93 @@ def transform_gl_response(points: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 # その他のフィールドはそのままコピー
                 new_payload[key] = value
 
+        # 存在しないフィールドに対して一時的に空データを追加
+        if "publication_date" not in new_payload:
+            new_payload["publication_date"] = ""
+        if "author" not in new_payload:
+            new_payload["author"] = ""
+        if "link" not in new_payload:
+            new_payload["link"] = ""
+        if "bibliographic_information" not in new_payload:
+            new_payload["bibliographic_information"] = ""
+
+        transformed_point = {
+            "id": point.get("id"),
+            "payload": new_payload
+        }
+
+        # vectorがあれば追加
+        if "vector" in point:
+            transformed_point["vector"] = point["vector"]
+
+        transformed.append(transformed_point)
+
+    return transformed
+
+def transform_package_insert_response(points: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """PACKAGE_INSERTのレスポンスを旧API互換形式に変換する"""
+    transformed = []
+    for point in points:
+        payload = point.get("payload", {})
+        metadata = payload.get("metadata", {})
+
+        # metadataをフラット化して旧API形式にマッピング
+        new_payload = {
+            "context": payload.get("page_content", ""),
+            "section_title": metadata.get("section_title", ""),
+            "generic_name": metadata.get("generic_name", ""),
+            "brand_name": metadata.get("product_name", ""),
+            "company_name": metadata.get("manufacturer", ""),
+            "revision_date": metadata.get("revision_date", ""),
+            "source": metadata.get("source", ""),
+        }
+
+        # URLからpackage_insert_noを抽出
+        url = payload.get("url")
+        if url:
+            # URLの最後の部分（パス）を取得
+            # 例: https://www.pmda.go.jp/PmdaSearch/iyakuDetail/166272_6250014F1036_2_13
+            # → 166272_6250014F1036_2_13 → 6250014F1036_2_13
+            try:
+                path_parts = url.rstrip('/').split('/')
+                if path_parts:
+                    last_part = path_parts[-1]
+                    # 最初のアンダースコアの後の部分を取得
+                    if '_' in last_part:
+                        package_insert_no = '_'.join(last_part.split('_')[1:])
+                        new_payload["package_insert_no"] = package_insert_no
+                    else:
+                        new_payload["package_insert_no"] = None
+                else:
+                    new_payload["package_insert_no"] = None
+            except Exception as e:
+                logger.warning(f"Failed to extract package_insert_no from URL {url}: {e}")
+                new_payload["package_insert_no"] = None
+        else:
+            new_payload["package_insert_no"] = None
+
+        # URLを追加
+        new_payload["url"] = url
+
+        # 旧APIには存在したが新コレクションにはないフィールド（互換性のためnullで設定）
+        new_payload["product_number"] = None
+        new_payload["sccj_no"] = None
+        new_payload["source_row_index"] = None
+        new_payload["source_file"] = None
+        new_payload["source_file_path"] = None
+        new_payload["therapeutic_class"] = None
+        new_payload["company_id"] = None
+        new_payload["import_timestamp"] = None
+
+        # 新コレクションにしか存在しないフィールドを追加
+        new_payload["yj_code"] = metadata.get("yj_code", "")
+        new_payload["document_id"] = metadata.get("document_id", "")
+        new_payload["specification"] = metadata.get("specification", "")
+        new_payload["classification_number"] = metadata.get("classification_number", None)
+        new_payload["section_number"] = metadata.get("section_number", None)
+        new_payload["branch_number"] = metadata.get("branch_number", None)
+        new_payload["common_name"] = metadata.get("common_name", "")
+
         transformed_point = {
             "id": point.get("id"),
             "payload": new_payload
@@ -330,7 +463,7 @@ class CubecNotePageRequest(BaseModel):
     with_vectors: Optional[bool] = False
 
 class PackageInsertChapterRequest(BaseModel):
-    package_insert_no: str
+    yj_code: str
     section_title: str
     with_payload: Optional[bool] = True
     with_vectors: Optional[bool] = False
@@ -376,10 +509,10 @@ async def get_cubec_note_page(request: CubecNotePageRequest):
 
 @app.post("/api/package-insert/chapter")
 async def get_package_insert_chapter(request: PackageInsertChapterRequest):
-    """PACKAGE_INSERTの章取得API - package_insert_noとsection_titleで検索"""
+    """PACKAGE_INSERTの章取得API - yj_codeとsection_titleで検索"""
     filters = [
-        {"field": "package_insert_no", "value": request.package_insert_no, "type": "keyword"},
-        {"field": "section_title", "value": request.section_title, "type": "text"}
+        {"field": "metadata.yj_code", "value": request.yj_code, "type": "text"},
+        {"field": "metadata.section_title", "value": request.section_title, "type": "keyword"}
     ]
 
     points = search_points_by_filters(
@@ -391,34 +524,38 @@ async def get_package_insert_chapter(request: PackageInsertChapterRequest):
 
     # URLを取得して追加
     if points:
-        # 各ポイントのpackage_insert_noを収集
-        package_insert_nos = []
+        # 各ポイントのyj_codeを収集
+        yj_codes = []
         for point in points:
-            if point.get("payload") and "package_insert_no" in point["payload"]:
-                package_insert_nos.append(point["payload"]["package_insert_no"])
+            metadata = point.get("payload", {}).get("metadata", {})
+            if metadata and "yj_code" in metadata:
+                yj_codes.append(metadata["yj_code"])
             else:
-                package_insert_nos.append(None)
+                yj_codes.append(None)
 
-        # ユニークなpackage_insert_noだけを抽出してAPIを呼ぶ
-        unique_package_nos = list(set(filter(None, package_insert_nos)))
+        # ユニークなyj_codeだけを抽出してAPIを呼ぶ
+        unique_yj_codes = list(set(filter(None, yj_codes)))
         url_cache = {}
 
-        if unique_package_nos:
-            # 並行してユニークなpackage_insert_noに対してのみURL取得を実行
-            tasks = [fetch_drug_url(package_no) for package_no in unique_package_nos]
+        if unique_yj_codes:
+            # 並行してユニークなyj_codeに対してのみURL取得を実行
+            tasks = [fetch_drug_url_by_yj_code(yj_code) for yj_code in unique_yj_codes]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
             # 結果をキャッシュに格納
-            for package_no, result in zip(unique_package_nos, results):
+            for yj_code, result in zip(unique_yj_codes, results):
                 if not isinstance(result, Exception) and result:
-                    url_cache[package_no] = result
+                    url_cache[yj_code] = result
 
         # キャッシュされた結果を各ポイントに追加
-        for point, package_insert_no in zip(points, package_insert_nos):
-            if package_insert_no and package_insert_no in url_cache:
-                point["payload"]["url"] = url_cache[package_insert_no]
+        for point, yj_code in zip(points, yj_codes):
+            if yj_code and yj_code in url_cache:
+                point["payload"]["url"] = url_cache[yj_code]
 
-    return {"success": True, "data": points, "count": len(points)}
+    # レスポンスを旧API互換形式に変換
+    transformed_points = transform_package_insert_response(points)
+
+    return {"success": True, "data": transformed_points, "count": len(transformed_points)}
 
 @app.post("/api")
 async def get_points(request: PointRequest):
@@ -440,34 +577,38 @@ async def get_points(request: PointRequest):
     if request.collection_name == CollectionName.GUIDELINE:
         points = transform_gl_response(points)
 
-    # PACKAGE_INSERTコレクションの場合、URLを取得して追加
+    # PACKAGE_INSERTコレクションの場合、URLを取得して追加し、レスポンスを変換
     if request.collection_name == CollectionName.PACKAGE_INSERT:
-        # 各ポイントのpackage_insert_noを収集
-        package_insert_nos = []
+        # 各ポイントのyj_codeを収集
+        yj_codes = []
         for point in points:
-            if point.get("payload") and "package_insert_no" in point["payload"]:
-                package_insert_nos.append(point["payload"]["package_insert_no"])
+            metadata = point.get("payload", {}).get("metadata", {})
+            if metadata and "yj_code" in metadata:
+                yj_codes.append(metadata["yj_code"])
             else:
-                package_insert_nos.append(None)
+                yj_codes.append(None)
 
-        # ユニークなpackage_insert_noだけを抽出してAPIを呼ぶ
-        unique_package_nos = list(set(filter(None, package_insert_nos)))
+        # ユニークなyj_codeだけを抽出してAPIを呼ぶ
+        unique_yj_codes = list(set(filter(None, yj_codes)))
         url_cache = {}
 
-        if unique_package_nos:
-            # 並行してユニークなpackage_insert_noに対してのみURL取得を実行
-            tasks = [fetch_drug_url(package_no) for package_no in unique_package_nos]
+        if unique_yj_codes:
+            # 並行してユニークなyj_codeに対してのみURL取得を実行
+            tasks = [fetch_drug_url_by_yj_code(yj_code) for yj_code in unique_yj_codes]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
             # 結果をキャッシュに格納
-            for package_no, result in zip(unique_package_nos, results):
+            for yj_code, result in zip(unique_yj_codes, results):
                 if not isinstance(result, Exception) and result:
-                    url_cache[package_no] = result
+                    url_cache[yj_code] = result
 
         # キャッシュされた結果を各ポイントに追加
-        for point, package_insert_no in zip(points, package_insert_nos):
-            if package_insert_no and package_insert_no in url_cache:
-                point["payload"]["url"] = url_cache[package_insert_no]
+        for point, yj_code in zip(points, yj_codes):
+            if yj_code and yj_code in url_cache:
+                point["payload"]["url"] = url_cache[yj_code]
+
+        # レスポンスを旧API互換形式に変換
+        points = transform_package_insert_response(points)
 
     return {"success": True, "data": points, "count": len(points)}
 
