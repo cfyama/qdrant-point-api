@@ -7,8 +7,10 @@ Qdrantベクトルデータベースから医学ノート（CUBEC_NOTE）およ�
 - **ポイントID指定取得**: 指定したポイントIDのデータを取得
 - **CUBEC_NOTE章取得**: 疾患名とメインカテゴリで医学ノートの特定章を検索
 - **CUBEC_NOTEページ取得**: 疾患名で医学ノートのすべてのページを検索
-- **PACKAGE_INSERT章取得**: 添付文書番号とセクションタイトルで医薬品情報を検索
+- **PACKAGE_INSERT章取得**: YJコードとセクションタイトルで医薬品情報を検索
 - **自動URL取得**: PACKAGE_INSERTコレクションの場合、医薬品URLを自動的に取得して付加
+  - **複数URL対応**: カンマ区切りのYJコードを持つ医薬品の場合、全ての添付文書URLを配列として取得
+  - 重複URLは自動的に削除され、ユニークなURLのみを返す
 - **CORS対応**: クロスオリジンリクエストをサポート
 
 ## 技術スタック
@@ -258,7 +260,7 @@ curl -X POST http://localhost:7860/api/cubec-note/page \
 **リクエストボディ:**
 ```json
 {
-  "package_insert_no": "6250014F1036_2_13",
+  "yj_code": "3399004M1425",
   "section_title": "禁忌",
   "with_payload": true,
   "with_vectors": false
@@ -266,7 +268,7 @@ curl -X POST http://localhost:7860/api/cubec-note/page \
 ```
 
 **パラメータ:**
-- `package_insert_no` (必須): 添付文書番号
+- `yj_code` (必須): YJコード（医薬品コード）
 - `section_title` (必須): セクションタイトル
 - `with_payload` (オプション): ペイロードを含めるか (デフォルト: `true`)
 - `with_vectors` (オプション): ベクトルを含めるか (デフォルト: `false`)
@@ -279,9 +281,11 @@ curl -X POST http://localhost:7860/api/cubec-note/page \
     {
       "id": 1234,
       "payload": {
-        "package_insert_no": "6250014F1036_2_13",
+        "yj_code": "3399004M1425",
         "section_title": "禁忌",
-        "url": "https://example.com/drug/6250014F1036",
+        "url": [
+          "https://www.pmda.go.jp/PmdaSearch/iyakuDetail/480187_3399004M1425_1_06"
+        ],
         ...
       }
     }
@@ -290,12 +294,24 @@ curl -X POST http://localhost:7860/api/cubec-note/page \
 }
 ```
 
+**複数URL対応:**
+- カンマ区切りのYJコード（例: `"2399009F1092, 2399009F2064"`）を持つ医薬品の場合、全てのYJコードに対応する添付文書URLを取得し、`url`フィールドに配列として返します
+- 重複するURLは自動的に削除されます
+- 例: 3つの異なる添付文書URLがある場合
+  ```json
+  "url": [
+    "https://www.pmda.go.jp/PmdaSearch/iyakuDetail/530213_2399009F1092_1_16",
+    "https://www.pmda.go.jp/PmdaSearch/iyakuDetail/530213_2399009F1092_4_05",
+    "https://www.pmda.go.jp/PmdaSearch/iyakuDetail/530213_2399009F1092_3_05"
+  ]
+  ```
+
 **使用例:**
 ```bash
 curl -X POST http://localhost:7860/api/package-insert/chapter \
   -H "Content-Type: application/json" \
   -d '{
-    "package_insert_no": "6250014F1036_2_13",
+    "yj_code": "3399004M1425",
     "section_title": "禁忌"
   }'
 ```
@@ -403,7 +419,7 @@ APIレスポンスでは、内部のネスト構造をフラット化して返�
 
 ## テスト
 
-### テストスクリプトを実行
+### ローカル環境のテスト
 
 ```bash
 # APIサーバーを起動
@@ -413,7 +429,20 @@ poetry run python src/app.py
 python test_new_apis.py
 ```
 
+### AWS環境のテスト
+
+```bash
+# AWS環境の包括的なテストを実行
+poetry run python test_aws_apis.py
+```
+
+**AWSエンドポイント**: `https://3j2q4wuiw4.ap-northeast-1.awsapprunner.com`
+
+**テスト結果**: 全ての機能が正常に動作しています（詳細は `AWS_TEST_RESULTS.md` を参照）
+
 ### 手動テスト例
+
+#### ローカル環境
 
 ```bash
 # CUBEC_NOTEページ取得
@@ -426,6 +455,28 @@ curl -X POST http://localhost:7860/api/cubec-note/page \
 curl -X POST http://localhost:7860/api/cubec-note/chapter \
   -H "Content-Type: application/json" \
   -d '{"title": "WPW症候群 -- 概要・推奨", "disease": "WPW症候群"}' \
+  -s | python3 -m json.tool
+
+# PACKAGE_INSERT章取得
+curl -X POST http://localhost:7860/api/package-insert/chapter \
+  -H "Content-Type: application/json" \
+  -d '{"yj_code": "1124023F1029", "section_title": "禁忌"}' \
+  -s | python3 -m json.tool
+```
+
+#### AWS環境
+
+```bash
+# CUBEC_NOTEページ取得
+curl -X POST https://3j2q4wuiw4.ap-northeast-1.awsapprunner.com/api/cubec-note/page \
+  -H "Content-Type: application/json" \
+  -d '{"disease": "WPW症候群", "with_payload": true}' \
+  -s | python3 -m json.tool
+
+# PACKAGE_INSERT章取得
+curl -X POST https://3j2q4wuiw4.ap-northeast-1.awsapprunner.com/api/package-insert/chapter \
+  -H "Content-Type: application/json" \
+  -d '{"yj_code": "1124023F1029", "section_title": "禁忌"}' \
   -s | python3 -m json.tool
 ```
 
