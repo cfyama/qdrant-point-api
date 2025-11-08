@@ -192,6 +192,9 @@ def transform_cubec_note_response(points: List[Dict[str, Any]]) -> List[Dict[str
         gl_departments = None
         gl_free_or_paid = None
 
+        # supervision関連のフィールドを一時保存
+        supervision_value = None
+
         # その他のmetadataフィールドをコピー
         for key, value in metadata.items():
             if key == "main_category":
@@ -220,9 +223,21 @@ def transform_cubec_note_response(points: List[Dict[str, Any]]) -> List[Dict[str
             elif key == "gl_count":
                 # gl_countは配列から計算できるため除外
                 pass
+            elif key == "supervision":
+                # supervisionは一時保存（supervisorに変換するため削除）
+                supervision_value = value
+            elif key == "supervisor":
+                # 元のsupervisorは使わないため無視
+                pass
             else:
                 # その他のフィールドはそのままコピー
                 new_payload[key] = value
+
+        # supervisionがあればそれを使用、なければ空文字列
+        if supervision_value is not None:
+            new_payload["supervisor"] = supervision_value
+        else:
+            new_payload["supervisor"] = ""
 
         # GL情報を配列のオブジェクトにまとめる
         if gl_names and isinstance(gl_names, list):
