@@ -11,6 +11,7 @@ from enum import Enum
 import logging
 import httpx
 import asyncio
+import re
 
 load_dotenv()
 
@@ -18,6 +19,38 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Qdrant Point Retrieval API")
+
+def remove_metadata_from_section(text: str) -> str:
+    """
+    添付文書セクションからメタデータ（販売名、製造販売元等）を除外する
+
+    メタデータパターン:
+    - 販売名: ...
+    - 製造販売元: ...
+    - 一般名: ...
+    - セクション名: ...
+    - (空行)
+    - # 数字 セクション名  <- ここから実コンテンツ
+
+    Args:
+        text: 元のテキスト
+
+    Returns:
+        メタデータを除外したテキスト（"# 数字" パターン以降）
+    """
+    if not text:
+        return text
+
+    lines = text.split('\n')
+
+    # "# 数字" で始まる行を探す（例: "# 4 効能又は効果"）
+    for i, line in enumerate(lines):
+        if re.match(r'^#\s+\d+', line):
+            # その行以降を結合して返す
+            return '\n'.join(lines[i:]).strip()
+
+    # パターンが見つからない場合は元のテキストを返す
+    return text.strip()
 
 # CORS設定
 cors_origins_str = os.environ.get("CORS_ORIGINS", "*")
@@ -513,6 +546,9 @@ class PackageInsertChapterRequest(BaseModel):
     with_payload: Optional[bool] = True
     with_vectors: Optional[bool] = False
 
+class PackageInsertCoreSectionsRequest(BaseModel):
+    yj_code: str
+
 @app.post("/api/cubec-note/chapter")
 async def get_cubec_note_chapter(request: CubecNoteChapterRequest):
     """CUBEC_NOTEの章取得API - titleとdiseaseで検索"""
@@ -594,6 +630,62 @@ async def get_package_insert_chapter(request: PackageInsertChapterRequest):
     transformed_points = transform_package_insert_response(points, url_cache)
 
     return {"success": True, "data": transformed_points, "count": len(transformed_points)}
+
+@app.post("/api/package-insert/core-sections")
+async def get_package_insert_core_sections(request: PackageInsertCoreSectionsRequest):
+    """PACKAGE_INSERTの主要セクション取得API - yj_codeで効能・用法・禁忌・副作用を取得"""
+
+    # 取得対象のセクションと代替表記
+    section_mappings = {
+        "indications": ["効能又は効果", "効能・効果"],
+        "dosage_and_administration": ["用法及び用量", "用法・用量"],
+        "contraindications": ["禁忌"],
+        "adverse_reactions": ["副作用"]
+    }
+
+    # 結果を格納する辞書
+    sections_data = {
+        "indications": "",
+        "dosage_and_administration": "",
+        "contraindications": "",
+        "adverse_reactions": ""
+    }
+
+    # 各セクションを検索
+    for key, section_titles in section_mappings.items():
+        for section_title in section_titles:
+            filters = [
+                {"field": "metadata.yj_code", "value": request.yj_code, "type": "text"},
+                {"field": "metadata.section_title", "value": section_title, "type": "keyword"}
+            ]
+
+            try:
+                points = search_points_by_filters(
+                    collection_name=CollectionName.PACKAGE_INSERT.get_actual_name(),
+                    filters=filters,
+                    with_payload=True,
+                    with_vectors=False
+                )
+
+                # 最初の1件が見つかればそのpage_contentを使用
+                if points and len(points) > 0:
+                    page_content = points[0].get("payload", {}).get("page_content", "")
+                    # メタデータを除外
+                    cleaned_content = remove_metadata_from_section(page_content)
+                    sections_data[key] = cleaned_content
+                    break  # 見つかったら次のセクションへ
+
+            except Exception as e:
+                logger.warning(f"Error searching for section {section_title}: {e}")
+                continue
+
+    return {
+        "success": True,
+        "data": {
+            "yj_code": request.yj_code,
+            "payload": sections_data
+        }
+    }
 
 @app.post("/api")
 async def get_points(request: PointRequest):

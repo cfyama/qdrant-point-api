@@ -138,6 +138,58 @@ curl -X POST http://localhost:8000/api/package-insert/chapter \
 
 ---
 
+### 4. PACKAGE_INSERT主要セクション取得API
+
+**エンドポイント:** `POST /api/package-insert/core-sections`
+
+**説明:** PACKAGE_INSERTコレクションから、YJコードを指定して主要な4つのセクション（効能・効果、用法・用量、禁忌、副作用）を一括取得します。
+
+**リクエストボディ:**
+```json
+{
+  "yj_code": "string"    // 必須: YJコード（医薬品コード）
+}
+```
+
+**レスポンス:**
+```json
+{
+  "success": true,
+  "data": {
+    "yj_code": "62504A4A1023",
+    "payload": {
+      "indications": "効能又は効果のテキスト...",
+      "dosage_and_administration": "用法及び用量のテキスト...",
+      "contraindications": "禁忌のテキスト...",
+      "adverse_reactions": "副作用のテキスト..."
+    }
+  }
+}
+```
+
+**レスポンスフィールド:**
+- `indications`: 効能又は効果（または効能・効果）
+- `dosage_and_administration`: 用法及び用量（または用法・用量）
+- `contraindications`: 禁忌
+- `adverse_reactions`: 副作用
+
+**特記事項:**
+- セクションが存在しない場合は空文字列 `""` が返されます
+- 同じYJコードで複数の添付文書がある場合、最初の1件が返されます
+- 各セクションは複数の表記パターン（例: "効能又は効果" / "効能・効果"）に対応しています
+- **メタデータ自動除外**: レスポンスからは販売名、製造販売元、一般名、セクション名などのメタデータが自動的に除外され、実コンテンツのみが返されます
+
+**使用例:**
+```bash
+curl -X POST http://localhost:8000/api/package-insert/core-sections \
+  -H "Content-Type: application/json" \
+  -d '{
+    "yj_code": "62504A4A1023"
+  }'
+```
+
+---
+
 ## 共通仕様
 
 ### エラーレスポンス
