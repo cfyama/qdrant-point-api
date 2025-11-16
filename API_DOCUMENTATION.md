@@ -28,6 +28,13 @@
       "payload": {
         "title": "章タイトル",
         "disease": "疾患名",
+        "reviewer": {
+          "name": "XX 太郎",
+          "affiliated_hospital": "XX病院",
+          "board_certified": [
+            "XX専門医"
+          ]
+        }
         // その他のpayloadフィールド
       }
     }
@@ -35,6 +42,8 @@
   "count": 10  // 取得件数
 }
 ```
+
+**注意:** `reviewer`フィールドは現在仮データを返します。実データ準備後に実データに切り替わります。
 
 **使用例:**
 ```bash
@@ -72,6 +81,13 @@ curl -X POST http://localhost:8000/api/cubec-note/chapter \
       "id": "point_id",
       "payload": {
         "disease": "疾患名",
+        "reviewer": {
+          "name": "XX 太郎",
+          "affiliated_hospital": "XX病院",
+          "board_certified": [
+            "XX専門医"
+          ]
+        }
         // その他のpayloadフィールド
       }
     }
@@ -79,6 +95,8 @@ curl -X POST http://localhost:8000/api/cubec-note/chapter \
   "count": 25  // 取得件数
 }
 ```
+
+**注意:** `reviewer`フィールドは現在仮データを返します。実データ準備後に実データに切り替わります。
 
 **使用例:**
 ```bash

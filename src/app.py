@@ -272,6 +272,15 @@ def transform_cubec_note_response(points: List[Dict[str, Any]]) -> List[Dict[str
         else:
             new_payload["supervisor"] = ""
 
+        # reviewer情報を追加（現在は仮データ）
+        new_payload["reviewer"] = {
+            "name": "XX 太郎",
+            "affiliated_hospital": "XX病院",
+            "board_certified": [
+                "XX専門医"
+            ]
+        }
+
         # GL情報を配列のオブジェクトにまとめる
         if gl_names and isinstance(gl_names, list):
             gl_array = []
