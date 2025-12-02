@@ -337,17 +337,23 @@ def transform_gl_response(points: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                     new_payload["source"] = "GUIDELINE"
                 else:
                     new_payload["source"] = value
+            elif key == "publication_date":
+                new_payload["publication_date"] = value
+            elif key == "publisher":
+                new_payload["author"] = value
+            elif key == "link":
+                new_payload["link"] = value
             else:
                 # その他のフィールドはそのままコピー
                 new_payload[key] = value
 
         # 存在しないフィールドに対して一時的に空データを追加
-        if "publication_date" not in new_payload:
-            new_payload["publication_date"] = ""
-        if "author" not in new_payload:
-            new_payload["author"] = ""
-        if "link" not in new_payload:
-            new_payload["link"] = ""
+#        if "publication_date" not in new_payload:
+#            new_payload["publication_date"] = ""
+#        if "author" not in new_payload:
+#            new_payload["author"] = ""
+#        if "link" not in new_payload:
+#            new_payload["link"] = ""
         if "bibliographic_information" not in new_payload:
             new_payload["bibliographic_information"] = ""
 
